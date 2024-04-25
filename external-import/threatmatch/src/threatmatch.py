@@ -3,7 +3,6 @@ import os
 import sys
 import time
 from datetime import datetime
-
 import requests
 import yaml
 from pycti import OpenCTIConnectorHelper, get_config_variable
@@ -56,6 +55,13 @@ class ThreatMatch:
             False,
             True,
         )
+        self.threatmatch_import_iocs = get_config_variable(
+            "THREATMATCH_IMPORT_IOCS",
+            ['threatmatch', 'import_iocs'],
+            config,
+            False, 
+            True
+        )
         self.update_existing_data = get_config_variable(
             "CONNECTOR_UPDATE_EXISTING_DATA",
             ["connector", "update_existing_data"],
@@ -101,13 +107,13 @@ class ThreatMatch:
                 for stix_object in bundle["objects"]:
                     if "created_by_ref" not in stix_object:
                         stix_object["created_by_ref"] = self.identity["standard_id"]
-                    if "object_refs" in stix_object and stix_object["type"] not in [
+                    '''if "object_refs" in stix_object and stix_object["type"] not in [
                         "report",
                         "note",
                         "opinion",
                         "observed-data",
                     ]:
-                        del stix_object["object_refs"]
+                        del stix_object["object_refs"]'''
                     final_objects.append(stix_object)
                 final_bundle = {"type": "bundle", "objects": final_objects}
                 final_bundle_json = json.dumps(final_bundle)
@@ -203,6 +209,30 @@ class ThreatMatch:
                             self._process_list(
                                 work_id, token, "reports", data.get("list")
                             )
+                        if self.threatmatch_import_iocs:
+                            response = requests.get(self.threatmatch_url + "/api/taxii/groups", headers = headers).json()
+                            all_results_id = response[0]['id']
+                            r = requests.get(
+                                self.threatmatch_url + "/api/taxii/groups",
+                                headers=headers,
+                                json={
+	                                'groupId' : all_results_id,
+                                    'stixTypeName':'indicator',
+                                    "date_since": import_from_date,
+                                },
+                            )
+                            if r.status_code != 200:
+                                self.helper.log_error(str(r.text))
+                            data = r.json()
+                            IOCs = []
+                            for entry in data['objects']:
+                                #for e in entry['objects_refs']:
+                                IOCs.append(entry)
+                            print(IOCs)
+                            # I do not know if this below is something i can do, might have to manually add to bundle
+                            self._process_list(
+                                work_id, token, "indicators", data.get("list")
+                            )
                     except Exception as e:
                         self.helper.log_error(str(e))
                     # Store the current timestamp as a last run
@@ -234,7 +264,6 @@ class ThreatMatch:
 
             if self.helper.connect_run_and_terminate:
                 self.helper.log_info("Connector stop")
-                self.helper.force_ping()
                 sys.exit(0)
 
             time.sleep(60)
