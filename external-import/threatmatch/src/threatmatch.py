@@ -4,6 +4,7 @@ import sys
 import time
 from datetime import datetime
 import requests
+import builtins
 import yaml
 from pycti import OpenCTIConnectorHelper, get_config_variable
 
@@ -91,30 +92,50 @@ class ThreatMatch:
             raise ValueError("ThreatMatch Authentication failed")
         data = r.json()
         return data.get("access_token")
+    
+    def _get_item(self, token, type, item_id):
+        headers = {"Authorization": "Bearer " + token}
+        r = requests.get(
+            self.threatmatch_url + "/api/stix/" + type + "/" + str(item_id),
+            headers=headers,
+        )
+        if r.status_code != 200:
+            self.helper.log_error(str(r.text))
+        if 'error' in r.json():
+            return []
+        data = r.json()['objects']
+        return data
 
     def _process_list(self, work_id, token, type, list):
-        headers = {"Authorization": "Bearer " + token}
-        for item in list:
-            r = requests.get(
-                self.threatmatch_url + "/api/stix/" + type + "/" + str(item),
-                headers=headers,
-            )
-            if r.status_code != 200:
-                self.helper.log_error(str(r.text))
-            bundle = r.json()
-            if "objects" in bundle and len(bundle) > 0:
-                final_objects = []
-                for stix_object in bundle["objects"]:
-                    if "created_by_ref" not in stix_object:
-                        stix_object["created_by_ref"] = self.identity["standard_id"]
-                    '''if "object_refs" in stix_object and stix_object["type"] not in [
+        self.helper.log_info(list, builtins.type(list))
+        if len(list) > 0:
+            if builtins.type(list[0]) is dict:
+                self.helper.log_info("Processing IOC")
+                bundle = list
+                self._process_bundle(work_id, bundle)
+            else:
+                for item in list:
+                    self.helper.log_info("Processing STIX")
+                    bundle=self._get_item(token, type, item)
+                    self._process_bundle(work_id, bundle)
+
+    def _process_bundle(self, work_id, bundle):
+        if len(bundle) > 0:
+            final_objects = []
+            for stix_object in bundle:
+                if "error" in stix_object:
+                    continue
+                if "created_by_ref" not in stix_object:
+                    stix_object["created_by_ref"] = self.identity["standard_id"]
+                if "object_refs" in stix_object and stix_object["type"] not in [
                         "report",
                         "note",
                         "opinion",
                         "observed-data",
+                        "indicator",
                     ]:
-                        del stix_object["object_refs"]'''
-                    final_objects.append(stix_object)
+                    del stix_object["object_refs"]
+                final_objects.append(stix_object)
                 final_bundle = {"type": "bundle", "objects": final_objects}
                 final_bundle_json = json.dumps(final_bundle)
                 self.helper.send_stix2_bundle(
@@ -194,26 +215,26 @@ class ThreatMatch:
                             self._process_list(
                                 work_id, token, "alerts", data.get("list")
                             )
-                        if self.threatmatch_import_reports:
-                            r = requests.get(
-                                self.threatmatch_url + "/api/reports/all",
-                                headers=headers,
-                                json={
-                                    "mode": "compact",
-                                    "date_since": import_from_date,
-                                },
-                            )
-                            if r.status_code != 200:
-                                self.helper.log_error(str(r.text))
-                            data = r.json()
-                            self._process_list(
-                                work_id, token, "reports", data.get("list")
-                            )
+                        #if self.threatmatch_import_reports:
+                        #    r = requests.get(
+                        #        self.threatmatch_url + "/api/reports/all",
+                        #        headers=headers,
+                        #        json={
+                        #            "mode": "compact",
+                        #            "date_since": import_from_date,
+                        #        },
+                        #    )
+                        #    if r.status_code != 200:
+                        #        self.helper.log_error(str(r.text))
+                        #    data = r.json()
+                        #    self._process_list(
+                        #        work_id, token, "reports", data.get("list")
+                        #    )
                         if self.threatmatch_import_iocs:
                             response = requests.get(self.threatmatch_url + "/api/taxii/groups", headers = headers).json()
                             all_results_id = response[0]['id']
                             r = requests.get(
-                                self.threatmatch_url + "/api/taxii/groups",
+                                self.threatmatch_url + "/api/taxii/objects",
                                 headers=headers,
                                 json={
 	                                'groupId' : all_results_id,
@@ -226,12 +247,9 @@ class ThreatMatch:
                             data = r.json()
                             IOCs = []
                             for entry in data['objects']:
-                                #for e in entry['objects_refs']:
                                 IOCs.append(entry)
-                            print(IOCs)
-                            # I do not know if this below is something i can do, might have to manually add to bundle
                             self._process_list(
-                                work_id, token, "indicators", data.get("list")
+                                work_id, token, "indicators", IOCs
                             )
                     except Exception as e:
                         self.helper.log_error(str(e))
