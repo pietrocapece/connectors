@@ -107,15 +107,12 @@ class ThreatMatch:
         return data
 
     def _process_list(self, work_id, token, type, list):
-        self.helper.log_info(list, builtins.type(list))
         if len(list) > 0:
             if builtins.type(list[0]) is dict:
-                self.helper.log_info("Processing IOC")
                 bundle = list
                 self._process_bundle(work_id, bundle)
             else:
                 for item in list:
-                    self.helper.log_info("Processing STIX")
                     bundle=self._get_item(token, type, item)
                     self._process_bundle(work_id, bundle)
 
