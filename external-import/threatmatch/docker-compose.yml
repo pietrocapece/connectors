@@ -22,3 +22,4 @@ services:
       - THREATMATCH_IMPORT_REPORTS=true # Import reports
       - THREATMATCH_IMPORT_IOCS=true # Import IOCs
     restart: always
+

@@ -28,3 +28,4 @@ If you are using it independently, remember that the connector will try to conne
 | `threatmatch_import_profiles`     | `THREATMATCH_IMPORT_PROFILES`     | No           | A boolean (`True` or `False`), import profiles collection from ThreatMatch.                         |
 | `threatmatch_import_alerts`       | `THREATMATCH_IMPORT_ALERTS`       | No           | A boolean (`True` or `False`), import alerts collection from ThreatMatch.                           |
 | `threatmatch_import_reports`      | `THREATMATCH_IMPORT_REPORTS`      | No           | A boolean (`True` or `False`), import reports collection from ThreatMatch                           |
+| `threatmatch_import_iocs`         | `THREATMATCH_IMPORT_IOCS`         | No           | A boolean (`True` or `False`), import indicators of compromise from ThreatMatch                           | 
